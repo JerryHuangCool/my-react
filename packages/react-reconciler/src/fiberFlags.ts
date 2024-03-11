@@ -1,3 +1,5 @@
+//在beginWork阶段一般标记插入或移动，删除等与结构相关的副作用，而不标记与属性相关的副作用
+
 export type Flags = number;
 
 export const NoFlags = 0b0000001;

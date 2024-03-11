@@ -4,8 +4,8 @@
 //ReactElement如果作为核心模块操作的数据结构，存在的问题：无法表达节点之间的关系字段有限，不好拓展（比如：无法表达状态）
 //需要一种新的数据结构介于ReactElement与真实UI节点之间,能够表达节点之间的关系,方便拓展（不仅作为数据存储单元，也能作为工作单元）
 //这就是FiberNode（虚拟DOM在React中的实现）,vue中叫VNode
-import { Props, Key, Ref } from 'shared/ReactTypes';
-import { WorkTag } from './workTags';
+import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
+import { FunctionComponent, HostComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 export class FiberNode {
@@ -27,6 +27,7 @@ export class FiberNode {
 	alternate: FiberNode | null;
 	//标志表明在宿主环境中的操作，也称为副作用
 	flags: Flags;
+	subtreeFlags: Flags;
 	updateQueue: unknown;
 
 	constructor(tag: WorkTag, pendingProps: Props, key: Key) {
@@ -57,6 +58,7 @@ export class FiberNode {
 
 		this.alternate = null;
 		this.flags = NoFlags;
+		this.subtreeFlags = NoFlags;
 	}
 }
 
@@ -100,6 +102,7 @@ export const createWorkInProgress = (
 		//update
 		wip.pendingProps = pendingProps;
 		wip.flags = NoFlags;
+		wip.subtreeFlags = NoFlags;
 	}
 	wip.type = current.type;
 	wip.updateQueue = current.updateQueue;
@@ -109,3 +112,16 @@ export const createWorkInProgress = (
 
 	return wip;
 };
+
+export function createFiberFromElement(element: ReactElementType): FiberNode {
+	const { type, key, props } = element;
+	let fiberTag: WorkTag = FunctionComponent;
+	if (typeof type === 'string') {
+		fiberTag = HostComponent;
+	} else if (typeof type !== 'function' && __DEV__) {
+		console.warn('未定义的type类型', element);
+	}
+	const fiber = new FiberNode(fiberTag, props, key);
+	fiber.type = type;
+	return fiber;
+}
