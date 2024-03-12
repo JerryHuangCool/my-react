@@ -1,3 +1,4 @@
+import { Dispatch } from 'react/src/currentDispatcher';
 import { Action } from 'shared/ReactTypes';
 //触发更新的方式 ReactDOM.createRoot().render  this.setState  useState的dispatch方法
 //用于触发更新数据的数据结构Update
@@ -10,6 +11,7 @@ export interface UpdateQueue<State> {
 	shared: {
 		pending: Update<State> | null;
 	};
+	dispatch: Dispatch<State> | null;
 }
 //创建Update实例
 export const createUpdate = <State>(action: Action<State>): Update<State> => {
@@ -23,7 +25,8 @@ export const createUpdateQueue = <State>() => {
 	return {
 		shared: {
 			pending: null
-		}
+		},
+		dispatch: null
 	} as UpdateQueue<State>;
 };
 
