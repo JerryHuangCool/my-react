@@ -26,7 +26,13 @@ const ReactElement = function (
 	};
 	return element;
 };
-
+export function isValidElement(object: any) {
+	return (
+		typeof object === 'object' &&
+		object !== null &&
+		object.$$typeof === REACT_ELEMENT_TYPE
+	);
+}
 //React17之前jsx会通过jsx方法运行,之后是React.createElement但其实是一个方法
 //jsx 方法第一个参数接收组件type，第二个参数是配置属性,后续参数可选都作为children处理
 export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
