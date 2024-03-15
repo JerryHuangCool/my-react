@@ -65,10 +65,10 @@ function reconcileChildren(wip: FiberNode, children?: ReactElementType) {
 	const current = wip.alternate;
 	//比较子节点的current fiber 和 ReactElement 生成 wip fiber
 	if (current !== null) {
-		//update  首屏渲染时，整个组件中只存在一个fiber即hostRootFiber对应的fiber在递归开始时作为wip被创建
+		//update  处理删除节点的情况并复用节点
 		wip.child = reconcilerChildFibers(wip, current?.child, children);
 	} else {
-		//mount
+		//mount 首屏渲染时，整个组件中只存在一个fiber即hostRootFiber对应的fiber在递归开始时作为wip被创建
 		wip.child = mountChildFibers(wip, null, children);
 	}
 }
