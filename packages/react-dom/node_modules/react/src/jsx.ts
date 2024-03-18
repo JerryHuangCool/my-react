@@ -1,4 +1,4 @@
-import { REACT_ELEMENT_TYPE } from 'shared/ReactSymbols';
+import { REACT_ELEMENT_TYPE, REACT_FRAGMENT_TYPE } from 'shared/ReactSymbols';
 import {
 	Type,
 	Key,
@@ -74,7 +74,7 @@ export const jsx = (type: ElementType, config: any, ...maybeChildren: any) => {
 	//返回一个新的ReactElement
 	return ReactElement(type, key, ref, props);
 };
-
+export const Fragment = REACT_FRAGMENT_TYPE;
 //实际react开发环境中的jsx进行了额外的检测,没有第三个参数
 export const jsxDEV = (type: ElementType, config: any) => {
 	let key: Key = null;
