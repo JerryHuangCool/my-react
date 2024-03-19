@@ -11,12 +11,14 @@ import {
 } from './upadateQueue';
 import { scheduleUpdateOnFiber } from './workLoop';
 import { Action } from 'shared/ReactTypes';
+import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
 //将hooks所对应的数据保存在Fc所对应的fiberNode上,fiberNoded的memoizedState字段指向一个hooks链表，需要更新时调用顺序一致
 
 let currentRenderingFiber: FiberNode | null = null;
 //指向当前正在处理的hook
 let workInprogressHook: Hook | null = null;
 let currentHook: Hook | null = null;
+let renderLane: Lane = NoLane;
 const { currentDispatcher } = internals;
 //链表中的节点
 interface Hook {
@@ -24,9 +26,10 @@ interface Hook {
 	updateQueue: unknown;
 	next: Hook | null;
 }
-export function renderWithHooks(wip: FiberNode) {
+export function renderWithHooks(wip: FiberNode, lane: Lane) {
 	currentRenderingFiber = wip;
 	wip.memoizedState = null;
+	renderLane = lane;
 	const current = wip.alternate;
 	if (current !== null) {
 		//update
@@ -41,6 +44,7 @@ export function renderWithHooks(wip: FiberNode) {
 	currentRenderingFiber = null;
 	workInprogressHook = null;
 	currentHook = null;
+	renderLane = NoLane;
 	return children;
 }
 
@@ -60,9 +64,10 @@ function dispatchSetState<State>(
 	updateQueue: UpdateQueue<State>,
 	action: Action<State>
 ) {
-	const update = createUpdate(action);
+	const lane = requestUpdateLane();
+	const update = createUpdate(action, lane);
 	enqueueUpdate(updateQueue, update);
-	scheduleUpdateOnFiber(fiber);
+	scheduleUpdateOnFiber(fiber, lane);
 }
 function updateState<State>(): [State, Dispatch<State>] {
 	//找到当前useState对应的hook数据
@@ -71,7 +76,11 @@ function updateState<State>(): [State, Dispatch<State>] {
 	const queue = hook.updateQueue as UpdateQueue<State>;
 	const pending = queue.shared.pending;
 	if (pending !== null) {
-		const { memoizedState } = processUpdateQueue(hook.memoizedState, pending);
+		const { memoizedState } = processUpdateQueue(
+			hook.memoizedState,
+			pending,
+			renderLane
+		);
 		hook.memoizedState = memoizedState;
 	}
 	return [hook.memoizedState, queue.dispatch as Dispatch<State>];

@@ -61,3 +61,11 @@ export function insertChildToContainer(
 ) {
 	container.insertBefore(child, before);
 }
+//调度微任务,根据宿主环境返回不同的方法
+export const scheduleMicroTask =
+	typeof queueMicrotask === 'function'
+		? queueMicrotask
+		: typeof Promise === 'function'
+			? (callback: (...args: any) => void) =>
+					Promise.resolve(null).then(callback)
+			: setTimeout;

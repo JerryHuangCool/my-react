@@ -9,6 +9,7 @@ import { FunctionComponent, HostComponent, WorkTag } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 import { Fragment } from './workTags';
+import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 export class FiberNode {
 	type: any;
 	tag: WorkTag;
@@ -79,12 +80,18 @@ export class FiberRootNode {
 	current: FiberNode;
 	//指向更新完成后的hostRootFiber
 	finishedWork: FiberNode | null;
+	//所有未被消费的lane的集合
+	pendingLanes: Lanes;
+	//已消费的lane
+	finishedLane: Lane;
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
 		//stateNode指向FiberRootNode
 		hostRootFiber.stateNode = this;
 		this.finishedWork = null;
+		this.pendingLanes = NoLanes;
+		this.finishedLane = NoLane;
 	}
 }
 
