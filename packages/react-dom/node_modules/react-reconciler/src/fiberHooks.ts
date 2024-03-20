@@ -12,6 +12,8 @@ import {
 import { scheduleUpdateOnFiber } from './workLoop';
 import { Action } from 'shared/ReactTypes';
 import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
+import { Flags, PassiveEffect } from './fiberFlags';
+import { HookHasEffect, Passive } from './hookEffectTags';
 //将hooks所对应的数据保存在Fc所对应的fiberNode上,fiberNoded的memoizedState字段指向一个hooks链表，需要更新时调用顺序一致
 
 let currentRenderingFiber: FiberNode | null = null;
@@ -26,9 +28,23 @@ interface Hook {
 	updateQueue: unknown;
 	next: Hook | null;
 }
+export interface Effect {
+	tag: Flags;
+	create: EffectCallbak | void;
+	destroy: EffectCallbak | void;
+	deps: EffectDeps;
+	next: Effect | null;
+}
+export interface FCUpdateQueue<State> extends UpdateQueue<State> {
+	lastEffect: Effect | null;
+}
+type EffectCallbak = () => void;
+type EffectDeps = any[] | null;
 export function renderWithHooks(wip: FiberNode, lane: Lane) {
 	currentRenderingFiber = wip;
 	wip.memoizedState = null;
+	//重置effect链表
+	wip.updateQueue = null;
 	renderLane = lane;
 	const current = wip.alternate;
 	if (current !== null) {
@@ -51,14 +67,108 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 //在mount阶段hook集合
 const HooksDispatcherOnMount: Dispatcher = {
 	useState: mountState,
-	useEffect: null
+	useEffect: mountEffect
 };
 
 //在uodate阶段hook集合
 const HooksDispatcherOnUpdate: Dispatcher = {
 	useState: updateState,
-	useEffect: null
+	useEffect: updateEffect
 };
+function mountEffect(create: EffectCallbak | void, deps: EffectDeps | void) {
+	//在commit阶段useEffect会被异步调度，在DOM渲染完成后异步执行，不会阻塞DOM渲染，而useLayoutEffect在layout阶段同步执行，会阻塞DOM渲染
+	//useInsertionEffect 与useLayoutEffect Hook非常相似，但它不能访问DOM节点的引用,用于插入样式 CSS-in-JS库中使用
+	const hook = mountWorkInProgresHook();
+	const nextDeps = deps === undefined ? null : deps;
+	(currentRenderingFiber as FiberNode).flags |= PassiveEffect;
+	hook.memoizedState = pushEffect(
+		Passive | HookHasEffect,
+		create,
+		undefined,
+		nextDeps
+	);
+}
+function updateEffect(create: EffectCallbak | void, deps: EffectDeps | void) {
+	//在commit阶段useEffect会被异步调度，在DOM渲染完成后异步执行，不会阻塞DOM渲染，而useLayoutEffect在layout阶段同步执行，会阻塞DOM渲染
+	//useInsertionEffect 与useLayoutEffect Hook非常相似，但它不能访问DOM节点的引用,用于插入样式 CSS-in-JS库中使用
+	const hook = updateWorkInProgresHook();
+	const nextDeps = deps === undefined ? null : deps;
+	let destroy: EffectCallbak | void;
+	if (currentHook !== null) {
+		//上一次的effect
+		const prevEffect = currentHook.memoizedState as Effect;
+		destroy = prevEffect.destroy;
+		if (nextDeps !== null) {
+			//浅比较依赖
+			const prevDeps = prevEffect.deps;
+			if (areHookInputsEqual(nextDeps, prevDeps)) {
+				hook.memoizedState = pushEffect(Passive, create, destroy, nextDeps);
+				return;
+			}
+		}
+		//不相等
+		(currentRenderingFiber as FiberNode).flags |= PassiveEffect;
+		hook.memoizedState = pushEffect(
+			Passive | HookHasEffect,
+			create,
+			destroy,
+			nextDeps
+		);
+	}
+}
+function areHookInputsEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
+	if (prevDeps === null || nextDeps === null) {
+		return false;
+	}
+	for (let i = 0; i < prevDeps.length && i < nextDeps.length; i++) {
+		if (Object.is(prevDeps[i], nextDeps[i])) {
+			continue;
+		}
+		return false;
+	}
+	return true;
+}
+function pushEffect(
+	hookFlags: Flags,
+	create: EffectCallbak | void,
+	destroy: EffectCallbak | void,
+	deps: EffectDeps
+): Effect {
+	const effect: Effect = {
+		tag: hookFlags,
+		create,
+		destroy,
+		deps,
+		//指向下一个Effect
+		next: null
+	};
+	const fiber = currentRenderingFiber as FiberNode;
+	const updateQueue = fiber.updateQueue as FCUpdateQueue<any>;
+	if (updateQueue === null) {
+		const updateQueue = createFcUpdateQueue();
+		fiber.updateQueue = updateQueue;
+		effect.next = effect;
+		updateQueue.lastEffect = effect;
+	} else {
+		//插入effect,构造环状链表
+		const lastEffect = updateQueue.lastEffect;
+		if (lastEffect === null) {
+			effect.next = effect;
+			updateQueue.lastEffect = effect;
+		} else {
+			const firstEffect = lastEffect.next;
+			lastEffect.next = effect;
+			effect.next = firstEffect;
+			updateQueue.lastEffect = effect;
+		}
+	}
+	return effect;
+}
+function createFcUpdateQueue<State>() {
+	const updateQueue = createUpdateQueue<State>() as FCUpdateQueue<State>;
+	updateQueue.lastEffect = null;
+	return updateQueue;
+}
 function dispatchSetState<State>(
 	fiber: FiberNode,
 	updateQueue: UpdateQueue<State>,
@@ -75,6 +185,7 @@ function updateState<State>(): [State, Dispatch<State>] {
 	//计算新state
 	const queue = hook.updateQueue as UpdateQueue<State>;
 	const pending = queue.shared.pending;
+	queue.shared.pending = null;
 	if (pending !== null) {
 		const { memoizedState } = processUpdateQueue(
 			hook.memoizedState,

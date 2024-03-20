@@ -1,9 +1,19 @@
 import { scheduleMicroTask } from 'hostConfig';
 import { beginWork } from './beginWork';
-import { commitMutationEffects } from './commitWork';
+import {
+	commitHookEffectListCreate,
+	commitHookEffectListDestroy,
+	commitHookEffectListUnmount,
+	commitMutationEffects
+} from './commitWork';
 import { completeWork } from './completeWork';
-import { FiberNode, FiberRootNode, createWorkInProgress } from './fiber';
-import { MutationMask, NoFlags } from './fiberFlags';
+import {
+	FiberNode,
+	FiberRootNode,
+	PendingPassiveEffects,
+	createWorkInProgress
+} from './fiber';
+import { MutationMask, NoFlags, PassiveMask } from './fiberFlags';
 import {
 	Lane,
 	NoLane,
@@ -14,10 +24,16 @@ import {
 } from './fiberLanes';
 import { flushSyncCallbacks, scheduleSyncCallback } from './syncTaskQueue';
 import { HostRoot } from './workTags';
-
+import {
+	unstable_scheduleCallback as scheduleCallback,
+	unstable_NormalPriority as NormalPriority
+} from 'scheduler';
+import { HookHasEffect, Passive } from './hookEffectTags';
 //递归的完整循环
 let workInProgress: FiberNode | null = null;
 let wipRootRenderLane: Lane = NoLane;
+//标识Effect已被调度
+let rootDoesHasPassiveEffects: boolean = false;
 
 function prepareFreshStack(root: FiberRootNode, lane: Lane) {
 	workInProgress = createWorkInProgress(root.current, {});
@@ -126,6 +142,20 @@ function commitRoot(root: FiberRootNode) {
 	root.finishedLane = NoLane;
 	//移除本次lane
 	markRootFinished(root, lane);
+	if (
+		(finishedWork.flags & PassiveMask) !== NoFlags ||
+		(finishedWork.subtreeFlags & PassiveMask) !== NoFlags
+	) {
+		if (!rootDoesHasPassiveEffects) {
+			rootDoesHasPassiveEffects = true;
+			//调度副作用
+			scheduleCallback(NormalPriority, () => {
+				//执行副作用
+				flushPassiveEffects(root.pendingPassiveEffects);
+				return;
+			});
+		}
+	}
 	//判断是否存在3个子阶段需要执行的操作
 	//需要判断 root flags 和 root subtreeFlags
 	const subtreeHasEffect =
@@ -137,15 +167,36 @@ function commitRoot(root: FiberRootNode) {
 		//beforeMutation
 		//mutation Placement操作
 		//两阶段之间实现双缓存 fiber树的切换
-		commitMutationEffects(finishedWork);
+		commitMutationEffects(finishedWork, root);
 		root.current = finishedWork;
 		//layout
 	} else {
 		//无更新发生也需切换
 		root.current = finishedWork;
 	}
+	rootDoesHasPassiveEffects = false;
+	ensureRootIsScheduled(root);
 }
-
+//执行副作用
+function flushPassiveEffects(pendingPassiveEffects: PendingPassiveEffects) {
+	//本次更新的任何create回调都必须在所有上一次更新的destroy回调执行后执行
+	//遍历effect
+	//先执行unmount
+	pendingPassiveEffects.unmount.forEach((effect) => {
+		commitHookEffectListUnmount(Passive, effect);
+	});
+	pendingPassiveEffects.unmount = [];
+	//触发上次更新的所有destroy
+	pendingPassiveEffects.update.forEach((effect) => {
+		commitHookEffectListDestroy(Passive | HookHasEffect, effect);
+	});
+	pendingPassiveEffects.update.forEach((effect) => {
+		commitHookEffectListCreate(Passive | HookHasEffect, effect);
+	});
+	pendingPassiveEffects.update = [];
+	//执行Effect中触发的更新
+	flushSyncCallbacks();
+}
 function workLoop() {
 	while (workInProgress !== null) {
 		performUnitOfWork(workInProgress);

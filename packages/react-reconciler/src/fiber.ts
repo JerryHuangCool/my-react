@@ -10,6 +10,7 @@ import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 import { Fragment } from './workTags';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
+import { Effect } from './fiberHooks';
 export class FiberNode {
 	type: any;
 	tag: WorkTag;
@@ -73,6 +74,12 @@ export class FiberNode {
 //两棵树会进行替换，称为双缓冲技术
 //以DFS顺序遍历ReactElement，先子后兄弟后父，递归遍历
 
+//用于收集Effect的两类回调
+export interface PendingPassiveEffects {
+	unmount: Effect[];
+	update: Effect[];
+}
+
 //整个DOM的根节点Fiber
 export class FiberRootNode {
 	container: Container;
@@ -84,6 +91,7 @@ export class FiberRootNode {
 	pendingLanes: Lanes;
 	//已消费的lane
 	finishedLane: Lane;
+	pendingPassiveEffects: PendingPassiveEffects;
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
@@ -92,6 +100,10 @@ export class FiberRootNode {
 		this.finishedWork = null;
 		this.pendingLanes = NoLanes;
 		this.finishedLane = NoLane;
+		this.pendingPassiveEffects = {
+			unmount: [],
+			update: []
+		};
 	}
 }
 
