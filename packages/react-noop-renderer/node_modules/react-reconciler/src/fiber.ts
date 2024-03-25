@@ -11,6 +11,7 @@ import { Container } from 'hostConfig';
 import { Fragment } from './workTags';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
+import { CallbackNode } from 'scheduler';
 export class FiberNode {
 	type: any;
 	tag: WorkTag;
@@ -92,6 +93,9 @@ export class FiberRootNode {
 	//已消费的lane
 	finishedLane: Lane;
 	pendingPassiveEffects: PendingPassiveEffects;
+
+	callbackNode: CallbackNode | null;
+	callbackPriority: Lane;
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
@@ -100,6 +104,9 @@ export class FiberRootNode {
 		this.finishedWork = null;
 		this.pendingLanes = NoLanes;
 		this.finishedLane = NoLane;
+
+		this.callbackNode = null;
+		this.callbackPriority = NoLane;
 		this.pendingPassiveEffects = {
 			unmount: [],
 			update: []

@@ -1,4 +1,10 @@
 import { Container } from 'hostConfig';
+import {
+	unstable_ImmediatePriority,
+	unstable_NormalPriority,
+	unstable_UserBlockingPriority,
+	unstable_runWithPriority
+} from 'scheduler';
 import { Props } from 'shared/ReactTypes';
 
 //将ReactDOM与Reconciler对接
@@ -72,7 +78,10 @@ function dispatchEvent(container: Container, eventType: string, e: Event) {
 function triggerEventFlow(paths: EventCallback[], se: SyntheticEvent) {
 	for (let i = 0; i < paths.length; i++) {
 		const callback = paths[i];
-		callback.call(null, se);
+		unstable_runWithPriority(eventTypeToSchdulerPriority(se.type), () => {
+			callback.call(null, se);
+		});
+
 		if (se.__stopPropagation) {
 			break;
 		}
@@ -117,4 +126,19 @@ function collectPaths(
 		targetElement = targetElement.parentNode as DOMElement;
 	}
 	return paths;
+}
+
+//将事件类型转换为调度器优先级
+function eventTypeToSchdulerPriority(eventType: string) {
+	switch (eventType) {
+		case 'click':
+		case 'keydown':
+		case 'keyup':
+			//返回同步优先级
+			return unstable_ImmediatePriority;
+		case 'scroll':
+			return unstable_UserBlockingPriority;
+		default:
+			return unstable_NormalPriority;
+	}
 }
