@@ -16,12 +16,15 @@ import {
 	HostRoot,
 	HostText
 } from './workTags';
-import { NoFlags, Update } from './fiberFlags';
+import { NoFlags, Update, Ref } from './fiberFlags';
 //标记更新
 function markUpdate(fiber: FiberNode) {
 	fiber.flags |= Update;
 }
 
+function markRef(fiber: FiberNode) {
+	fiber.flags |= Ref;
+}
 export const completeWork = (wip: FiberNode) => {
 	const newProps = wip.pendingProps;
 	const current = wip.alternate;
@@ -37,6 +40,10 @@ export const completeWork = (wip: FiberNode) => {
 				// 变的属性名，变的属性值，变的属性名，变的属性值
 				// 这里的实现是为了省事
 				markUpdate(wip);
+				//update时若ref发生变化，标记Ref
+				if (current.ref !== wip.ref) {
+					markRef(wip);
+				}
 			} else {
 				//mount
 				//1.构建DOM，2将DOM插入DOM树
@@ -44,6 +51,10 @@ export const completeWork = (wip: FiberNode) => {
 				const instance = createInstance(wip.type, newProps);
 				appendAllChildren(instance, wip);
 				wip.stateNode = instance;
+				//mount时,ref不为null标记Ref
+				if (wip.ref !== null) {
+					markRef(wip);
+				}
 			}
 			bubbleProperties(wip);
 			return null;

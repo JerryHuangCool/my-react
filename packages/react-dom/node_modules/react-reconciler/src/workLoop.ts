@@ -4,6 +4,7 @@ import {
 	commitHookEffectListCreate,
 	commitHookEffectListDestroy,
 	commitHookEffectListUnmount,
+	commitLayoutEffects,
 	commitMutationEffects
 } from './commitWork';
 import { completeWork } from './completeWork';
@@ -274,10 +275,12 @@ function commitRoot(root: FiberRootNode) {
 	if (subtreeHasEffect || rootHasEffect) {
 		//beforeMutation
 		//mutation Placement操作
-		//两阶段之间实现双缓存 fiber树的切换
+
 		commitMutationEffects(finishedWork, root);
+		//两阶段之间实现双缓存 fiber树的切换
 		root.current = finishedWork;
 		//layout
+		commitLayoutEffects(finishedWork, root);
 	} else {
 		//无更新发生也需切换
 		root.current = finishedWork;

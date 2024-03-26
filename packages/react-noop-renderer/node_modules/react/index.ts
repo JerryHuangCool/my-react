@@ -16,6 +16,10 @@ export const useTransition: Dispatcher['useTransition'] = () => {
 	const dispatcher = resolveDispatcher();
 	return dispatcher.useTransition();
 };
+export const useRef: Dispatcher['useRef'] = (initialValue) => {
+	const dispatcher = resolveDispatcher();
+	return dispatcher.useRef(initialValue);
+};
 //内部数据共享层
 export const _SECRET_INTERNSLD_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = {
 	currentDispatcher,

@@ -13,7 +13,7 @@ import {
 import { mountChildFibers, reconcilerChildFibers } from './childFibers';
 import { renderWithHooks } from './fiberHooks';
 import { Lane } from './fiberLanes';
-
+import { Ref } from './fiberFlags';
 export const beginWork = (wip: FiberNode, renderLane: Lane) => {
 	//比较，最终返回子FiberNode
 	switch (wip.tag) {
@@ -66,6 +66,7 @@ function updateHostRoot(wip: FiberNode, renderLane: Lane) {
 function updateHostComponent(wip: FiberNode) {
 	const nextProps = wip.pendingProps;
 	const nextChildren = nextProps.children;
+	markRef(wip.alternate, wip);
 	reconcileChildren(wip, nextChildren);
 	return wip.child;
 }
@@ -79,5 +80,17 @@ function reconcileChildren(wip: FiberNode, children?: ReactElementType) {
 	} else {
 		//mount 首屏渲染时，整个组件中只存在一个fiber即hostRootFiber对应的fiber在递归开始时作为wip被创建
 		wip.child = mountChildFibers(wip, null, children);
+	}
+}
+
+function markRef(current: FiberNode | null, workInprogress: FiberNode) {
+	const ref = workInprogress.ref;
+
+	if (
+		(current === null && ref !== null) ||
+		(current !== null && current.ref !== ref)
+	) {
+		//mount时存在ref或者update时ref发生变化
+		workInprogress.flags |= Ref;
 	}
 }

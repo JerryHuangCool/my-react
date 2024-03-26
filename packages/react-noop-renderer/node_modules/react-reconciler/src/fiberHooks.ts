@@ -72,14 +72,16 @@ export function renderWithHooks(wip: FiberNode, lane: Lane) {
 const HooksDispatcherOnMount: Dispatcher = {
 	useState: mountState,
 	useEffect: mountEffect,
-	useTransition: mountTransition
+	useTransition: mountTransition,
+	useRef: mountRef
 };
 
 //在uodate阶段hook集合
 const HooksDispatcherOnUpdate: Dispatcher = {
 	useState: updateState,
 	useEffect: updateEffect,
-	useTransition: updateTransition
+	useTransition: updateTransition,
+	useRef: updateRef
 };
 function mountEffect(create: EffectCallbak | void, deps: EffectDeps | void) {
 	//在commit阶段useEffect会被异步调度，在DOM渲染完成后异步执行，不会阻塞DOM渲染，而useLayoutEffect在layout阶段同步执行，会阻塞DOM渲染
@@ -133,6 +135,16 @@ function areHookInputsEqual(nextDeps: EffectDeps, prevDeps: EffectDeps) {
 		return false;
 	}
 	return true;
+}
+function mountRef<T>(initialValue: T): { current: T } {
+	const hook = mountWorkInProgresHook();
+	const ref = { current: initialValue };
+	hook.memoizedState = ref;
+	return ref;
+}
+function updateRef<T>(initialValue: T): { current: T } {
+	const hook = updateWorkInProgresHook();
+	return hook.memoizedState;
 }
 function pushEffect(
 	hookFlags: Flags,
