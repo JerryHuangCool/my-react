@@ -1,4 +1,4 @@
-import { Action } from 'shared/ReactTypes';
+import { Action, ReactContext } from 'shared/ReactTypes';
 
 //内部数据共享层，将在react-reconciler中不同阶段需要使用的的hooks，结构等设置成不同的集合，在数据共享层设置对应的当前集合暴露给React包使用,共享数据存储在shared中
 //这里对应集合
@@ -7,6 +7,7 @@ export interface Dispatcher {
 	useEffect: (callback: () => void | void, deps: any[] | void) => void;
 	useTransition: () => [boolean, (callback: () => void) => void];
 	useRef: <T>(initialValue: T) => { current: T };
+	useContext: <T>(context: ReactContext<T>) => T;
 }
 
 export type Dispatch<State> = (action: Action<State>) => void;

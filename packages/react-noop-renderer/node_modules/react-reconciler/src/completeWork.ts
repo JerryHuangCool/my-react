@@ -10,6 +10,7 @@ import {
 } from 'hostConfig';
 import { FiberNode } from './fiber';
 import {
+	ContextProvider,
 	Fragment,
 	FunctionComponent,
 	HostComponent,
@@ -17,6 +18,7 @@ import {
 	HostText
 } from './workTags';
 import { NoFlags, Update, Ref } from './fiberFlags';
+import { popProvider } from './fiberContext';
 //标记更新
 function markUpdate(fiber: FiberNode) {
 	fiber.flags |= Update;
@@ -77,6 +79,11 @@ export const completeWork = (wip: FiberNode) => {
 		case HostRoot:
 		case FunctionComponent:
 		case Fragment:
+			bubbleProperties(wip);
+			return null;
+		case ContextProvider:
+			const context = wip.type._context;
+			popProvider(context);
 			bubbleProperties(wip);
 			return null;
 		default:

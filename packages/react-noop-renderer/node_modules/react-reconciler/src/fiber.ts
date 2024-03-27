@@ -5,13 +5,19 @@
 //需要一种新的数据结构介于ReactElement与真实UI节点之间,能够表达节点之间的关系,方便拓展（不仅作为数据存储单元，也能作为工作单元）
 //这就是FiberNode（虚拟DOM在React中的实现）,vue中叫VNode
 import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
-import { FunctionComponent, HostComponent, WorkTag } from './workTags';
+import {
+	ContextProvider,
+	FunctionComponent,
+	HostComponent,
+	WorkTag
+} from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
 import { Container } from 'hostConfig';
 import { Fragment } from './workTags';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
+import { REACT_PROVIDER_TYPE } from 'shared/ReactSymbols';
 export class FiberNode {
 	type: any;
 	tag: WorkTag;
@@ -148,6 +154,11 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
 	let fiberTag: WorkTag = FunctionComponent;
 	if (typeof type === 'string') {
 		fiberTag = HostComponent;
+	} else if (
+		typeof type === 'object' &&
+		type.$$typeof === REACT_PROVIDER_TYPE
+	) {
+		fiberTag = ContextProvider;
 	} else if (typeof type !== 'function' && __DEV__) {
 		console.warn('未定义的type类型', element);
 	}

@@ -12,7 +12,7 @@ import {
 	processUpdateQueue
 } from './upadateQueue';
 import { scheduleUpdateOnFiber } from './workLoop';
-import { Action } from 'shared/ReactTypes';
+import { Action, ReactContext } from 'shared/ReactTypes';
 import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
 import { Flags, PassiveEffect } from './fiberFlags';
 import { HookHasEffect, Passive } from './hookEffectTags';
@@ -73,7 +73,8 @@ const HooksDispatcherOnMount: Dispatcher = {
 	useState: mountState,
 	useEffect: mountEffect,
 	useTransition: mountTransition,
-	useRef: mountRef
+	useRef: mountRef,
+	useContext: readContext
 };
 
 //在uodate阶段hook集合
@@ -81,7 +82,8 @@ const HooksDispatcherOnUpdate: Dispatcher = {
 	useState: updateState,
 	useEffect: updateEffect,
 	useTransition: updateTransition,
-	useRef: updateRef
+	useRef: updateRef,
+	useContext: readContext
 };
 function mountEffect(create: EffectCallbak | void, deps: EffectDeps | void) {
 	//在commit阶段useEffect会被异步调度，在DOM渲染完成后异步执行，不会阻塞DOM渲染，而useLayoutEffect在layout阶段同步执行，会阻塞DOM渲染
@@ -345,4 +347,14 @@ function mountWorkInProgresHook(): Hook {
 		workInprogressHook = workInprogressHook.next;
 	}
 	return workInprogressHook;
+}
+
+function readContext<T>(context: ReactContext<T>): T {
+	const consumer = currentRenderingFiber;
+	if (consumer === null) {
+		throw new Error('只能在函数组件中调用useContext');
+	}
+	//这里并没有执行mountWorkInProgresHook，useContext并不在hook链表中，可以在if语句中调用，没有其他hook的限制
+	const value = context._currentValue;
+	return value;
 }
