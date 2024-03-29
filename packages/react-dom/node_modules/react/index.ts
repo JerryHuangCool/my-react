@@ -2,7 +2,11 @@ import { Dispatcher, resolveDispatcher } from './src/currentDispatcher';
 import currentDispatcher from './src/currentDispatcher';
 import currentBatchConfig from './src/currentBatchConfig';
 import { jsxDEV, jsx, isValidElement as isValidElementFn } from './src/jsx';
-
+import { Usable } from 'shared/ReactTypes';
+export {
+	REACT_FRAGMENT_TYPE as Fragment,
+	REACT_SUSPENSE_TYPE as Suspense
+} from 'shared/ReactSymbols';
 //React打包入口
 export { createContext } from './src/context';
 export const useState: Dispatcher['useState'] = (initalState: any) => {
@@ -24,6 +28,10 @@ export const useRef: Dispatcher['useRef'] = (initialValue) => {
 export const useContext: Dispatcher['useContext'] = (context) => {
 	const dispatcher = resolveDispatcher();
 	return dispatcher.useContext(context);
+};
+export const use: Dispatcher['use'] = <T>(usable: Usable<T>) => {
+	const dispatcher = resolveDispatcher();
+	return dispatcher.use(usable);
 };
 //内部数据共享层
 export const _SECRET_INTERNSLD_DO_NOT_USE_OR_YOU_WILL_BE_FIRED = {

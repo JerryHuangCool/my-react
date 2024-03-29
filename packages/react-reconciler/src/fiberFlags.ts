@@ -12,8 +12,13 @@ export const ChildDeletion = 0b00000000000000000000010000;
 //表示本次fiber更新需要触发useEffect
 export const PassiveEffect = 0b00000000000000000000100000;
 export const Ref = 0b00000000000000000001000000;
+export const Visibility = 0b00000000000000000010000000;
+//render阶段 捕获到一些东西
+export const ShouldCapture = 0b00000000000000000100000000;
+export const DidCapture = 0b0000000000000000001000000000;
 
-export const MutationMask = Placement | Update | ChildDeletion | Ref;
+export const MutationMask =
+	Placement | Update | ChildDeletion | Ref | Visibility;
 export const LayoutMask = Ref;
 //Deletion时需要执行useEffect的destory回调
 export const PassiveMask = PassiveEffect | ChildDeletion;

@@ -15,10 +15,13 @@ import {
 	FunctionComponent,
 	HostComponent,
 	HostRoot,
-	HostText
+	HostText,
+	OffscreenComponent,
+	SuspenseComponent
 } from './workTags';
-import { NoFlags, Update, Ref } from './fiberFlags';
+import { NoFlags, Update, Ref, Visibility } from './fiberFlags';
 import { popProvider } from './fiberContext';
+import { popSuspenseHandler } from './suspenseContext';
 //标记更新
 function markUpdate(fiber: FiberNode) {
 	fiber.flags |= Update;
@@ -79,11 +82,33 @@ export const completeWork = (wip: FiberNode) => {
 		case HostRoot:
 		case FunctionComponent:
 		case Fragment:
+		case OffscreenComponent:
 			bubbleProperties(wip);
 			return null;
 		case ContextProvider:
 			const context = wip.type._context;
 			popProvider(context);
+			bubbleProperties(wip);
+			return null;
+		case SuspenseComponent:
+			popSuspenseHandler();
+			const offscreenFiber = wip.child as FiberNode;
+			const isHidden = offscreenFiber.pendingProps.mode === 'hidden';
+			const currentOffscreenFiber = offscreenFiber.alternate;
+
+			if (currentOffscreenFiber !== null) {
+				// update
+				const wasHidden = currentOffscreenFiber.pendingProps.mode === 'hidden';
+
+				if (isHidden !== wasHidden) {
+					offscreenFiber.flags |= Visibility;
+					//将flags冒泡到SuspenseComponent对应的fiber
+					bubbleProperties(offscreenFiber);
+				}
+			} else if (isHidden) {
+				offscreenFiber.flags |= Visibility;
+				bubbleProperties(offscreenFiber);
+			}
 			bubbleProperties(wip);
 			return null;
 		default:

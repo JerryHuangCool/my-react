@@ -3,8 +3,12 @@ import {
 	Instance,
 	appendChildToContainer,
 	commitUpdate,
+	hideInstance,
+	hideTextInstance,
 	insertChildToContainer,
-	removeChild
+	removeChild,
+	unhideInstance,
+	unhideTextInstance
 } from 'hostConfig';
 import { FiberNode, FiberRootNode, PendingPassiveEffects } from './fiber';
 import {
@@ -17,13 +21,15 @@ import {
 	PassiveMask,
 	Placement,
 	Update,
-	Ref
+	Ref,
+	Visibility
 } from './fiberFlags';
 import {
 	FunctionComponent,
 	HostComponent,
 	HostRoot,
-	HostText
+	HostText,
+	OffscreenComponent
 } from './workTags';
 import { Effect, FCUpdateQueue } from './fiberHooks';
 import { HookHasEffect } from './hookEffectTags';
@@ -92,7 +98,74 @@ const commitMutationEffectsOnFiber = (
 		//mutation时，解绑ref
 		safelyDetachRef(finishedWork);
 	}
+	if ((flags & Visibility) !== NoFlags && tag === OffscreenComponent) {
+		const isHidden = finishedWork.pendingProps.mode === 'hidden';
+		hideOrUnhideAllChildren(finishedWork, isHidden);
+		finishedWork.flags &= ~Visibility;
+	}
 };
+
+function hideOrUnhideAllChildren(finishedWork: FiberNode, isHidden: boolean) {
+	//找到所有子树的顶层host节点
+	findHostSubtreeRoot(finishedWork, (hostRoot) => {
+		const instance = hostRoot.stateNode;
+		if (hostRoot.tag === HostComponent) {
+			isHidden ? hideInstance(instance) : unhideInstance(instance);
+		} else if (hostRoot.tag === HostText) {
+			isHidden
+				? hideTextInstance(instance)
+				: unhideTextInstance(instance, hostRoot.memoizedProps.content);
+		}
+	});
+}
+
+function findHostSubtreeRoot(
+	finishedWork: FiberNode,
+	callback: (hostSubtreeRoot: FiberNode) => void
+) {
+	let node = finishedWork;
+	let hostSubtreeRoot = null;
+	while (true) {
+		if (node.tag === HostComponent) {
+			if (hostSubtreeRoot === null) {
+				hostSubtreeRoot = node;
+				callback(node);
+			}
+		} else if (node.tag === HostText) {
+			if (hostSubtreeRoot === null) {
+				callback(node);
+			}
+		} else if (
+			node.tag === OffscreenComponent &&
+			node.pendingProps.mode === 'hidden' &&
+			node !== finishedWork
+		) {
+			//当前处理的Suspense组件内部还有SuspenseComponent
+			//不需要处理，由嵌套的组件自身处理
+		} else if (node.child !== null) {
+			node.child.return = node;
+			node = node.child;
+			continue;
+		}
+		if (node === finishedWork) {
+			return;
+		}
+		while (node.sibling === null) {
+			if (node.return === null || node.return === finishedWork) {
+				return;
+			}
+			if (hostSubtreeRoot === node) {
+				hostSubtreeRoot = null;
+			}
+			node = node.return;
+		}
+		if (hostSubtreeRoot === node) {
+			hostSubtreeRoot = null;
+		}
+		node.sibling.return = node.return;
+		node = node.sibling;
+	}
+}
 
 function safelyDetachRef(current: FiberNode) {
 	const ref = current.ref;

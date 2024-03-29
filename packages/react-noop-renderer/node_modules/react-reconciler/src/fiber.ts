@@ -4,11 +4,13 @@
 //ReactElement如果作为核心模块操作的数据结构，存在的问题：无法表达节点之间的关系字段有限，不好拓展（比如：无法表达状态）
 //需要一种新的数据结构介于ReactElement与真实UI节点之间,能够表达节点之间的关系,方便拓展（不仅作为数据存储单元，也能作为工作单元）
 //这就是FiberNode（虚拟DOM在React中的实现）,vue中叫VNode
-import { Props, Key, Ref, ReactElementType } from 'shared/ReactTypes';
+import { Props, Key, Ref, ReactElementType, Wakeable } from 'shared/ReactTypes';
 import {
 	ContextProvider,
 	FunctionComponent,
 	HostComponent,
+	OffscreenComponent,
+	SuspenseComponent,
 	WorkTag
 } from './workTags';
 import { Flags, NoFlags } from './fiberFlags';
@@ -17,7 +19,12 @@ import { Fragment } from './workTags';
 import { Lane, Lanes, NoLane, NoLanes } from './fiberLanes';
 import { Effect } from './fiberHooks';
 import { CallbackNode } from 'scheduler';
-import { REACT_PROVIDER_TYPE } from 'shared/ReactSymbols';
+import { REACT_PROVIDER_TYPE, REACT_SUSPENSE_TYPE } from 'shared/ReactSymbols';
+
+export interface OffscreenProps {
+	mode: 'visible' | 'hidden';
+	children: any;
+}
 export class FiberNode {
 	type: any;
 	tag: WorkTag;
@@ -102,6 +109,8 @@ export class FiberRootNode {
 
 	callbackNode: CallbackNode | null;
 	callbackPriority: Lane;
+
+	pingCache: WeakMap<Wakeable<any>, Set<Lane>> | null;
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
@@ -117,6 +126,7 @@ export class FiberRootNode {
 			unmount: [],
 			update: []
 		};
+		this.pingCache = null;
 	}
 }
 
@@ -159,6 +169,8 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
 		type.$$typeof === REACT_PROVIDER_TYPE
 	) {
 		fiberTag = ContextProvider;
+	} else if (type === REACT_SUSPENSE_TYPE) {
+		fiberTag = SuspenseComponent;
 	} else if (typeof type !== 'function' && __DEV__) {
 		console.warn('未定义的type类型', element);
 	}
@@ -170,5 +182,12 @@ export function createFiberFromElement(element: ReactElementType): FiberNode {
 
 export function createFiberFromFragment(elements: any[], key: Key): FiberNode {
 	const fiber = new FiberNode(Fragment, elements, key);
+	return fiber;
+}
+
+export function createFiberFromOffscreen(
+	pendingProps: OffscreenProps
+): FiberNode {
+	const fiber = new FiberNode(OffscreenComponent, pendingProps, null);
 	return fiber;
 }

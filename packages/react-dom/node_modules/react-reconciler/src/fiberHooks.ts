@@ -12,10 +12,12 @@ import {
 	processUpdateQueue
 } from './upadateQueue';
 import { scheduleUpdateOnFiber } from './workLoop';
-import { Action, ReactContext } from 'shared/ReactTypes';
+import { Action, ReactContext, Thenable, Usable } from 'shared/ReactTypes';
 import { Lane, NoLane, requestUpdateLane } from './fiberLanes';
 import { Flags, PassiveEffect } from './fiberFlags';
 import { HookHasEffect, Passive } from './hookEffectTags';
+import { REACT_CONTEXT_TYPE } from 'shared/ReactSymbols';
+import { trackUsedThenable } from './thenable';
 //将hooks所对应的数据保存在Fc所对应的fiberNode上,fiberNoded的memoizedState字段指向一个hooks链表，需要更新时调用顺序一致
 
 let currentRenderingFiber: FiberNode | null = null;
@@ -74,7 +76,8 @@ const HooksDispatcherOnMount: Dispatcher = {
 	useEffect: mountEffect,
 	useTransition: mountTransition,
 	useRef: mountRef,
-	useContext: readContext
+	useContext: readContext,
+	use
 };
 
 //在uodate阶段hook集合
@@ -83,7 +86,8 @@ const HooksDispatcherOnUpdate: Dispatcher = {
 	useEffect: updateEffect,
 	useTransition: updateTransition,
 	useRef: updateRef,
-	useContext: readContext
+	useContext: readContext,
+	use
 };
 function mountEffect(create: EffectCallbak | void, deps: EffectDeps | void) {
 	//在commit阶段useEffect会被异步调度，在DOM渲染完成后异步执行，不会阻塞DOM渲染，而useLayoutEffect在layout阶段同步执行，会阻塞DOM渲染
@@ -357,4 +361,26 @@ function readContext<T>(context: ReactContext<T>): T {
 	//这里并没有执行mountWorkInProgresHook，useContext并不在hook链表中，可以在if语句中调用，没有其他hook的限制
 	const value = context._currentValue;
 	return value;
+}
+
+function use<T>(usable: Usable<T>): T {
+	if (usable !== null && typeof usable === 'object') {
+		if (typeof (usable as Thenable<T>).then === 'function') {
+			// thenable
+			const thenable = usable as Thenable<T>;
+			return trackUsedThenable(thenable);
+		} else if ((usable as ReactContext<T>).$$typeof === REACT_CONTEXT_TYPE) {
+			// context
+			const context = usable as ReactContext<T>;
+			return readContext(context);
+		}
+	}
+	throw new Error('不支持的use参数');
+}
+
+export function resetHooksOnUnwind() {
+	//unwind前重置全局变量
+	currentRenderingFiber = null;
+	currentHook = null;
+	workInprogressHook = null;
 }
