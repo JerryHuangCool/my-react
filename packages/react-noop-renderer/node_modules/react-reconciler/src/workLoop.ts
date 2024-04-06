@@ -20,8 +20,10 @@ import {
 	NoLane,
 	SyncLane,
 	getHighestPriorityLane,
+	getNextLane,
 	lanesToSchedulerPriority,
 	markRootFinished,
+	markRootSuspended,
 	mergeLanes
 } from './fiberLanes';
 import { flushSyncCallbacks, scheduleSyncCallback } from './syncTaskQueue';
@@ -43,8 +45,15 @@ let wipRootRenderLane: Lane = NoLane;
 //标识Effect已被调度
 let rootDoesHasPassiveEffects: boolean = false;
 type RootExitStatus = number;
+//工作中状态
+const RootInProgress = 0;
+//并发更新中途打断
 const RootInComplete = 1;
+//render完成
 const RootCompleted = 2;
+//由于挂起，当前是未完成状态，不用进入commit阶段
+const RootDidNotComplete = 3;
+let wipRootExitStatus: number = RootInProgress;
 //执行过程中报错了
 type SuspendedReason = typeof NotSuspended | typeof SuspendedOnData;
 const NotSuspended = 0;
@@ -56,6 +65,9 @@ function prepareFreshStack(root: FiberRootNode, lane: Lane) {
 	root.finishedWork = null;
 	workInProgress = createWorkInProgress(root.current, {});
 	wipRootRenderLane = lane;
+	wipRootExitStatus = RootInProgress;
+	wipSuspendedReason = NotSuspended;
+	wipThrownValue = null;
 }
 
 export function scheduleUpdateOnFiber(fiber: FiberNode, lane: Lane) {
@@ -69,7 +81,7 @@ export function scheduleUpdateOnFiber(fiber: FiberNode, lane: Lane) {
 //schedule阶段入口
 export function ensureRootIsScheduled(root: FiberRootNode) {
 	//实现判断机制，选出一个lane
-	const updateLane = getHighestPriorityLane(root.pendingLanes);
+	const updateLane = getNextLane(root);
 	const existingCallback = root.callbackNode;
 	if (updateLane === NoLane) {
 		//没有更新
@@ -149,7 +161,7 @@ function performConcurrentWorkOnRoot(
 		}
 	}
 
-	const lane = getHighestPriorityLane(root.pendingLanes);
+	const lane = getNextLane(root);
 	const curCallbackNode = root.callbackNode;
 	if (lane === NoLane) {
 		return null;
@@ -158,31 +170,40 @@ function performConcurrentWorkOnRoot(
 
 	// render阶段
 	const exitStatus = renderRoot(root, lane, !needSync);
-	ensureRootIsScheduled(root);
-	if (exitStatus === RootInComplete) {
-		//中断
-		if (root.callbackNode !== curCallbackNode) {
-			//以开启更高优先级调度，当前返回null
-			return null;
-		}
-		//继续调度
-		return performConcurrentWorkOnRoot.bind(null, root);
-	}
-	if (exitStatus === RootCompleted) {
-		const finishedWork = root.current.alternate;
-		root.finishedWork = finishedWork;
-		root.finishedLane = lane;
-		wipRootRenderLane = NoLane;
-		//根据wip fiberNode树，以及树中的flags执行具体DOM操作
-		//commit阶段的入口方法
-		commitRoot(root);
-	} else if (__DEV__) {
-		console.error('还未实现并发更新结束状态');
+
+	switch (exitStatus) {
+		case RootInComplete:
+			//中断
+			if (root.callbackNode !== curCallbackNode) {
+				//以开启更高优先级调度，当前返回null
+				return null;
+			}
+			//继续调度
+			return performConcurrentWorkOnRoot.bind(null, root);
+		case RootCompleted:
+			const finishedWork = root.current.alternate;
+			root.finishedWork = finishedWork;
+			root.finishedLane = lane;
+			wipRootRenderLane = NoLane;
+			//根据wip fiberNode树，以及树中的flags执行具体DOM操作
+			//commit阶段的入口方法
+			commitRoot(root);
+			break;
+		case RootDidNotComplete:
+			wipRootRenderLane = NoLane;
+			markRootSuspended(root, lane);
+			ensureRootIsScheduled(root);
+			break;
+		default:
+			if (__DEV__) {
+				console.error('还未实现并发更新结束状态');
+			}
+			break;
 	}
 }
 //递归方法,同步更新入口
 function performSyncWorkOnRoot(root: FiberRootNode) {
-	const nextLane = getHighestPriorityLane(root.pendingLanes);
+	const nextLane = getNextLane(root);
 	if (nextLane !== SyncLane) {
 		//其他比SyncLane低的优先级
 		// Nolane
@@ -195,16 +216,26 @@ function performSyncWorkOnRoot(root: FiberRootNode) {
 	//render阶段
 	const exitStatus = renderRoot(root, nextLane, false);
 
-	if (exitStatus === RootCompleted) {
-		const finishedWork = root.current.alternate;
-		root.finishedWork = finishedWork;
-		root.finishedLane = nextLane;
-		wipRootRenderLane = NoLane;
-		//根据wip fiberNode树，以及树中的flags执行具体DOM操作
-		//commit阶段的入口方法
-		commitRoot(root);
-	} else if (__DEV__) {
-		console.error('还未实现同步更新结束状态');
+	switch (exitStatus) {
+		case RootCompleted:
+			const finishedWork = root.current.alternate;
+			root.finishedWork = finishedWork;
+			root.finishedLane = nextLane;
+			wipRootRenderLane = NoLane;
+			//根据wip fiberNode树，以及树中的flags执行具体DOM操作
+			//commit阶段的入口方法
+			commitRoot(root);
+			break;
+		case RootDidNotComplete:
+			wipRootRenderLane = NoLane;
+			markRootSuspended(root, nextLane);
+			ensureRootIsScheduled(root);
+			break;
+		default:
+			if (__DEV__) {
+				console.error('还未实现同步更新结束状态');
+			}
+			break;
 	}
 }
 function renderRoot(root: FiberRootNode, lane: Lane, shouldTimeSlice: boolean) {
@@ -235,6 +266,9 @@ function renderRoot(root: FiberRootNode, lane: Lane, shouldTimeSlice: boolean) {
 			handleThrow(root, err);
 		}
 	} while (true);
+	if (wipRootExitStatus !== RootInProgress) {
+		return wipRootExitStatus;
+	}
 	//中断执行
 	if (shouldTimeSlice && workInProgress !== null) {
 		return RootInComplete;
@@ -279,6 +313,7 @@ function unwindUnitOfWork(unitOfWork: FiberNode) {
 	} while (incompleteWork !== null);
 	//使用了use，抛出了data，但是没有定义suspense包裹use
 	//到了root
+	wipRootExitStatus = RootDidNotComplete;
 	workInProgress = null;
 }
 

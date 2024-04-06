@@ -111,6 +111,9 @@ export class FiberRootNode {
 	callbackPriority: Lane;
 
 	pingCache: WeakMap<Wakeable<any>, Set<Lane>> | null;
+	//代表当前所有被挂起的更新的优先级
+	suspendedLanes: Lanes;
+	pingdLanes: Lanes;
 	constructor(container: Container, hostRootFiber: FiberNode) {
 		this.container = container;
 		this.current = hostRootFiber;
@@ -118,6 +121,8 @@ export class FiberRootNode {
 		hostRootFiber.stateNode = this;
 		this.finishedWork = null;
 		this.pendingLanes = NoLanes;
+		this.suspendedLanes = NoLanes;
+		this.pingdLanes = NoLanes;
 		this.finishedLane = NoLane;
 
 		this.callbackNode = null;
